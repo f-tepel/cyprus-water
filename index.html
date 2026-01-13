@@ -89,8 +89,46 @@
             </div>
 
             <!-- Chart Section -->
-            <div class="bg-white rounded-xl shadow-lg border border-blue-50 p-6 h-[400px] md:h-[500px] relative">
-                <canvas id="waterLevelChart"></canvas>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Main Water Level Chart -->
+                <div class="bg-white rounded-xl shadow-lg border border-blue-50 p-6 h-[400px] lg:col-span-2 relative">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4">Total Water Storage History</h3>
+                    <div class="h-[320px]">
+                        <canvas id="waterLevelChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Dams Breakdown Chart -->
+                <div class="bg-white rounded-xl shadow-lg border border-blue-50 p-6 h-[400px] relative">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4">Dam Storage Breakdown (MCM)</h3>
+                    <div class="h-[320px]">
+                        <canvas id="damsChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Annual Inflows Chart -->
+                <div class="bg-white rounded-xl shadow-lg border border-blue-50 p-6 h-[400px] relative">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4">Annual Inflows (MCM)</h3>
+                    <div class="h-[320px]">
+                        <canvas id="inflowsChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Monthly Inflows Comparison Chart -->
+                <div class="bg-white rounded-xl shadow-lg border border-blue-50 p-6 h-[400px] lg:col-span-2 relative">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4">Monthly Inflows Comparison (Last 6 Years)</h3>
+                    <div class="h-[320px]">
+                        <canvas id="monthlyComparisonChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Daily Inflows Chart -->
+                <div class="bg-white rounded-xl shadow-lg border border-blue-50 p-6 h-[400px] lg:col-span-2 relative">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4">Daily Inflows (Current Month)</h3>
+                    <div class="h-[320px]">
+                        <canvas id="dailyInflowsChart"></canvas>
+                    </div>
+                </div>
             </div>
             
             <footer class="text-center text-gray-400 text-sm mt-8">
@@ -101,8 +139,11 @@
     </div>
 
     <script>
-        // API Endpoint
-        const API_URL = 'https://cyprus-water.appspot.com/api/timeseries';
+        // API Endpoints
+        const API_URL_TIMESERIES = 'https://cyprus-water.appspot.com/api/timeseries';
+        const API_URL_DAMS = 'https://cyprus-water.appspot.com/api/dams';
+        const API_URL_STATS = 'https://cyprus-water.appspot.com/api/date-statistics';
+        const API_URL_INFLOWS = 'https://cyprus-water.appspot.com/api/monthly-inflows';
 
         // DOM Elements
         const loadingEl = document.getElementById('loading');
@@ -131,39 +172,13 @@
 
         async function initDashboard() {
             try {
-                const response = await fetch(API_URL);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-
-                if (!data.percentages || Object.keys(data.percentages).length === 0) {
-                    throw new Error('No data available');
-                }
-
-                // Process Data
-                const timeseriesData = Object.entries(data.percentages).map(([key, value]) => {
-                    return {
-                        date: key,
-                        percentage: value.totalPercentage * 100,
-                        capacity: value.totalCapacityInMCM
-                    };
-                });
-
-                const sortedData = timeseriesData.sort((a, b) => new Date(a.date) - new Date(b.date));
-                const latestEntry = sortedData[sortedData.length - 1];
-
-                // Update Stats Cards
-                currentPercentageEl.textContent = `${latestEntry.percentage.toFixed(1)}%`;
-                
-                totalCapacityEl.innerHTML = latestEntry.capacity 
-                    ? `${formatNumber(Math.round(latestEntry.capacity))} <abbr title="Million Cubic Meters" class="text-xl text-gray-500 no-underline cursor-help">MCM</abbr>` 
-                    : 'N/A';
-                
-                lastUpdatedEl.textContent = formatDate(latestEntry.date);
-
-                // Render Chart
-                renderChart(sortedData);
+                // Fetch all data in parallel
+                await Promise.all([
+                    fetchAndRenderTimeseries(),
+                    fetchAndRenderDams(),
+                    fetchAndRenderInflows(),
+                    fetchAndRenderDailyInflows()
+                ]);
 
                 // Show Dashboard
                 loadingEl.classList.add('hidden');
@@ -177,12 +192,321 @@
             }
         }
 
-        function renderChart(data) {
+        async function fetchAndRenderTimeseries() {
+            const response = await fetch(API_URL_TIMESERIES);
+            if (!response.ok) throw new Error(`Timeseries API error: ${response.status}`);
+            const data = await response.json();
+
+            if (!data.percentages || Object.keys(data.percentages).length === 0) {
+                throw new Error('No timeseries data available');
+            }
+
+            // Process Data
+            const timeseriesData = Object.entries(data.percentages).map(([key, value]) => {
+                return {
+                    date: key,
+                    percentage: value.totalPercentage * 100,
+                    capacity: value.totalCapacityInMCM
+                };
+            });
+
+            const sortedData = timeseriesData.sort((a, b) => new Date(a.date) - new Date(b.date));
+            const latestEntry = sortedData[sortedData.length - 1];
+
+            // Update Stats Cards
+            currentPercentageEl.textContent = `${latestEntry.percentage.toFixed(1)}%`;
+            
+            totalCapacityEl.innerHTML = latestEntry.capacity 
+                ? `${formatNumber(Math.round(latestEntry.capacity))} <abbr title="Million Cubic Meters" class="text-xl text-gray-500 no-underline cursor-help">MCM</abbr>` 
+                : 'N/A';
+            
+            lastUpdatedEl.textContent = formatDate(latestEntry.date);
+
+            // Render Chart
+            renderTimeseriesChart(sortedData);
+        }
+
+        async function fetchAndRenderDams() {
+            const [damsResponse, statsResponse] = await Promise.all([
+                fetch(API_URL_DAMS),
+                fetch(API_URL_STATS)
+            ]);
+
+            if (!damsResponse.ok) throw new Error(`Dams API error: ${damsResponse.status}`);
+            if (!statsResponse.ok) throw new Error(`Stats API error: ${statsResponse.status}`);
+
+            const damsData = await damsResponse.json();
+            const statsData = await statsResponse.json();
+
+            // Merge Data: Create an array of dams with Name, Capacity, Current Storage
+            const processedDams = damsData.map(dam => {
+                // Determine the key used in statsData.storageInMCM (usually nameEn)
+                // statsData.storageInMCM keys match dam.nameEn mostly
+                const currentStorage = statsData.storageInMCM[dam.nameEn] || 0;
+                // Capacity in API is in cubic meters, convert to MCM
+                const capacityMCM = dam.capacity / 1000000;
+                
+                return {
+                    name: dam.nameEn,
+                    capacity: capacityMCM,
+                    current: currentStorage,
+                    percentage: (currentStorage / capacityMCM) * 100
+                };
+            });
+
+            // Sort by Capacity descending
+            processedDams.sort((a, b) => b.capacity - a.capacity);
+
+            // Take top 15 to avoid overcrowding if there are many
+            const topDams = processedDams.slice(0, 15);
+
+            renderDamsChart(topDams);
+        }
+
+        async function fetchAndRenderInflows() {
+            const response = await fetch(API_URL_INFLOWS);
+            if (!response.ok) throw new Error(`Inflows API error: ${response.status}`);
+            const data = await response.json();
+
+            // Aggregate by Year
+            const inflowsByYear = data.reduce((acc, curr) => {
+                const year = curr.year;
+                if (!acc[year]) acc[year] = 0;
+                acc[year] += curr.inflowInMCM;
+                return acc;
+            }, {});
+
+            const chartData = Object.entries(inflowsByYear)
+                .map(([year, total]) => ({ year, total }))
+                .sort((a, b) => a.year - b.year);
+
+            renderInflowsChart(chartData);
+            renderMonthlyComparisonChart(data);
+        }
+
+        async function fetchAndRenderDailyInflows() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = today.getMonth(); // 0-indexed
+            const days = [];
+
+            // Generate dates from 1st to today
+            // Note: API might not have data for today yet, but we check anyway
+            for (let d = 1; d <= today.getDate(); d++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                days.push(dateStr);
+            }
+
+            // Fetch all days in parallel
+            // Note: This makes multiple requests. 
+            const requests = days.map(date => 
+                fetch(`${API_URL_STATS}?date=${date}`)
+                    .then(res => {
+                        if (!res.ok) throw new Error('Network response was not ok');
+                        return res.json();
+                    })
+                    .catch(err => {
+                        console.warn(`Failed to fetch stats for ${date}`, err);
+                        return null;
+                    })
+            );
+
+            const results = await Promise.all(requests);
+            
+            // Process results
+            // Filter out failures and deduplicate dates (API returns latest available if requested is future/missing)
+            const seenDates = new Set();
+            const dailyData = [];
+
+            results.forEach(data => {
+                if (!data || !data.date) return;
+                
+                // data.date format example: "Jan 12, 2026 12:00:00 AM"
+                // We normalize it to avoid duplicates
+                const dateObj = new Date(data.date);
+                const dateKey = dateObj.toDateString(); // "Mon Jan 12 2026"
+
+                // Only sum inflow if we haven't seen this date yet
+                // AND the date belongs to the current month (in case API returns old data for start of month requests - unlikely but safe)
+                if (!seenDates.has(dateKey) && dateObj.getMonth() === month && dateObj.getFullYear() === year) {
+                    seenDates.add(dateKey);
+                    
+                    let totalInflow = 0;
+                    if (data.inflowInMCM) {
+                        totalInflow = Object.values(data.inflowInMCM).reduce((a, b) => a + b, 0);
+                    }
+
+                    dailyData.push({
+                        date: dateObj,
+                        inflow: totalInflow
+                    });
+                }
+            });
+
+            // Sort by date
+            dailyData.sort((a, b) => a.date - b.date);
+
+            renderDailyInflowsChart(dailyData);
+        }
+
+        function renderDailyInflowsChart(data) {
+            const ctx = document.getElementById('dailyInflowsChart').getContext('2d');
+            
+            const labels = data.map(d => d.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+            const values = data.map(d => d.inflow);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily Inflow',
+                        data: values,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)', // Emerald-500
+                        borderRadius: 4,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Inflow: ${context.parsed.y.toFixed(3)} MCM`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#64748b' } },
+                        y: { 
+                            grid: { color: '#f1f5f9' }, 
+                            ticks: { color: '#94a3b8' },
+                            title: { display: true, text: 'MCM' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderMonthlyComparisonChart(rawData) {
+            const ctx = document.getElementById('monthlyComparisonChart').getContext('2d');
+            
+            // Find the latest year
+            const maxYear = Math.max(...rawData.map(d => d.year));
+            const yearsToShow = [maxYear, maxYear - 1, maxYear - 2, maxYear - 3, maxYear - 4, maxYear - 5];
+            
+            // Prepare datasets
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const datasets = [];
+            
+            // Colors for the years (Current year is standout Blue, others are distinct)
+            const colors = [
+                { border: 'rgb(37, 99, 235)', bg: 'rgba(37, 99, 235, 0.1)', width: 3 }, // Current
+                { border: 'rgb(100, 116, 139)', bg: 'transparent', width: 2 }, // Last Year (Slate-500)
+                { border: 'rgb(148, 163, 184)', bg: 'transparent', width: 2, dash: [5, 5] }, // -2 (Slate-400)
+                { border: 'rgb(203, 213, 225)', bg: 'transparent', width: 2, dash: [5, 5] }, // -3 (Slate-300)
+                { border: 'rgb(226, 232, 240)', bg: 'transparent', width: 1, dash: [2, 2] }, // -4
+                { border: 'rgb(241, 245, 249)', bg: 'transparent', width: 1, dash: [2, 2] }  // -5
+            ];
+
+            // Better palette for comparison:
+            const palette = [
+                'rgb(37, 99, 235)',   // Blue (Current)
+                'rgb(234, 88, 12)',   // Orange
+                'rgb(22, 163, 74)',   // Green
+                'rgb(147, 51, 234)',  // Purple
+                'rgb(219, 39, 119)',  // Pink
+                'rgb(71, 85, 105)'    // Slate
+            ];
+
+            yearsToShow.forEach((year, index) => {
+                // Filter data for this year and sort by month index
+                const yearData = rawData
+                    .filter(d => d.year === year)
+                    .sort((a, b) => a.periodOrder - b.periodOrder);
+                
+                // Map to 12 months array (fill missing with null)
+                const dataPoints = new Array(12).fill(null);
+                yearData.forEach(d => {
+                    // periodOrder is 1-12, array is 0-11
+                    if (d.periodOrder >= 1 && d.periodOrder <= 12) {
+                        dataPoints[d.periodOrder - 1] = d.inflowInMCM;
+                    }
+                });
+
+                datasets.push({
+                    label: year.toString(),
+                    data: dataPoints,
+                    borderColor: palette[index],
+                    backgroundColor: 'transparent',
+                    borderWidth: index === 0 ? 3 : 2, // Thicker for current year
+                    tension: 0.3,
+                    pointRadius: index === 0 ? 4 : 2,
+                    pointHoverRadius: 6
+                });
+            });
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', align: 'end' },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += context.parsed.y.toFixed(2) + ' MCM';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#64748b' } },
+                        y: { 
+                            grid: { color: '#f1f5f9' }, 
+                            ticks: { color: '#94a3b8' },
+                            title: { display: true, text: 'Inflow (MCM)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderTimeseriesChart(data) {
             const ctx = document.getElementById('waterLevelChart').getContext('2d');
             
-            // Create Gradient
             const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(37, 99, 235, 0.5)'); // Blue-600 with opacity
+            gradient.addColorStop(0, 'rgba(37, 99, 235, 0.5)'); 
             gradient.addColorStop(1, 'rgba(37, 99, 235, 0.0)');
 
             const dates = data.map(item => formatDate(item.date));
@@ -195,26 +519,21 @@
                     datasets: [{
                         label: 'Water Level (%)',
                         data: percentages,
-                        borderColor: 'rgb(37, 99, 235)', // Blue-600
+                        borderColor: 'rgb(37, 99, 235)',
                         backgroundColor: gradient,
                         borderWidth: 2,
-                        pointRadius: 0, // Hide points for cleaner look initially
+                        pointRadius: 0,
                         pointHoverRadius: 6,
                         fill: true,
-                        tension: 0.4 // Smooth curves
+                        tension: 0.4
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    interaction: {
-                        intersect: false,
-                        mode: 'index',
-                    },
+                    interaction: { intersect: false, mode: 'index' },
                     plugins: {
-                        legend: {
-                            display: false
-                        },
+                        legend: { display: false },
                         tooltip: {
                             backgroundColor: 'rgba(255, 255, 255, 0.9)',
                             titleColor: '#1e293b',
@@ -231,27 +550,121 @@
                         }
                     },
                     scales: {
-                        x: {
-                            grid: {
-                                display: false
-                            },
-                            ticks: {
-                                maxTicksLimit: 8,
-                                color: '#94a3b8'
-                            }
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, color: '#94a3b8' } },
+                        y: { 
+                            min: 0, max: 100, 
+                            grid: { color: '#f1f5f9' }, 
+                            ticks: { callback: v => v + '%', color: '#94a3b8' } 
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDamsChart(data) {
+            const ctx = document.getElementById('damsChart').getContext('2d');
+            
+            const labels = data.map(d => d.name);
+            const currentData = data.map(d => d.current);
+            const capacityData = data.map(d => d.capacity);
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Current Storage',
+                            data: currentData,
+                            backgroundColor: 'rgba(37, 99, 235, 0.8)',
+                            borderRadius: 4,
                         },
-                        y: {
-                            min: 0,
-                            max: 100,
-                            grid: {
-                                color: '#f1f5f9'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    return value + '%';
-                                },
-                                color: '#94a3b8'
+                        {
+                            label: 'Total Capacity',
+                            data: capacityData,
+                            backgroundColor: 'rgba(203, 213, 225, 0.5)',
+                            borderRadius: 4,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { position: 'top', align: 'end' },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(1)} MCM`;
+                                }
                             }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
+                        y: { 
+                            grid: { color: '#f1f5f9' }, 
+                            ticks: { color: '#94a3b8' },
+                            title: { display: true, text: 'MCM' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderInflowsChart(data) {
+            const ctx = document.getElementById('inflowsChart').getContext('2d');
+            
+            const labels = data.map(d => d.year);
+            const values = data.map(d => d.total);
+
+            // Color logic: Highlight recent years or just uniform
+            const backgroundColors = values.map(v => 'rgba(14, 165, 233, 0.7)'); // Sky-500
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Annual Inflow',
+                        data: values,
+                        backgroundColor: backgroundColors,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1e293b',
+                            bodyColor: '#1e293b',
+                            borderColor: '#e2e8f0',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return `Inflow: ${context.parsed.y.toFixed(1)} MCM`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#64748b' } },
+                        y: { 
+                            grid: { color: '#f1f5f9' }, 
+                            ticks: { color: '#94a3b8' },
+                            title: { display: true, text: 'MCM' }
                         }
                     }
                 }
