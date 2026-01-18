@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyprus Weather | Real-time Weather Conditions</title>
+    <meta name="description" content="Real-time weather conditions across Cyprus. View current weather, temperature, and forecasts for different areas of the island.">
+    <meta name="keywords" content="Cyprus weather, weather forecast, Cyprus climate, weather conditions, Nicosia weather, Limassol weather">
+    <meta name="author" content="e1+">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Cyprus Weather | Real-time Weather Conditions">
+    <meta property="og:description" content="Real-time weather conditions across Cyprus. View current weather, temperature, and forecasts for different areas.">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="Cyprus Weather | Real-time Weather Conditions">
+    <meta property="twitter:description" content="Real-time weather conditions across Cyprus. View current weather, temperature, and forecasts for different areas.">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .weather-icon {
+            width: 48px;
+            height: 48px;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-cyan-50 text-slate-800 min-h-screen">
+
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <header class="mb-8 text-center sm:text-left">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-blue-900 mb-2">Cyprus Weather Map</h1>
+                    <p class="text-blue-600">Real-time weather conditions across the island</p>
+                </div>
+                <nav class="flex gap-2">
+                    <a href="index.html" class="px-4 py-2 bg-white rounded-lg shadow-sm border border-blue-100 text-blue-700 hover:bg-blue-50 transition-colors text-sm font-medium">
+                        Water Levels
+                    </a>
+                    <a href="weather.html" class="px-4 py-2 bg-blue-600 rounded-lg shadow-sm text-white hover:bg-blue-700 transition-colors text-sm font-medium">
+                        Weather
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Loading State -->
+        <div id="loading" class="flex flex-col items-center justify-center py-20">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <p class="text-blue-500 font-medium">Loading weather data...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error" class="hidden bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg mb-8 text-center shadow-sm">
+            <p id="error-message">Unable to fetch weather data. Please try again later.</p>
+            <button onclick="window.location.reload()" class="mt-2 text-sm font-semibold underline hover:text-red-800">Retry</button>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard" class="hidden fade-in space-y-8">
+            <!-- Weather Map -->
+            <div class="bg-white rounded-xl shadow-lg border border-blue-50 p-6">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
+                    <h3 class="text-lg font-semibold text-gray-700">Weather Conditions Map</h3>
+                    <!-- Forecast Period Buttons -->
+                    <div class="flex flex-wrap gap-2" id="forecastButtons">
+                        <button onclick="switchForecastPeriod('now')" 
+                                class="forecast-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 active">
+                            Now
+                        </button>
+                        <button onclick="switchForecastPeriod('today')" 
+                                class="forecast-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white text-blue-700 border border-blue-200 hover:bg-blue-50">
+                            Today
+                        </button>
+                        <button onclick="switchForecastPeriod('tomorrow')" 
+                                class="forecast-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white text-blue-700 border border-blue-200 hover:bg-blue-50">
+                            Tomorrow
+                        </button>
+                        <button onclick="switchForecastPeriod('day2')" 
+                                class="forecast-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white text-blue-700 border border-blue-200 hover:bg-blue-50">
+                            Day 2
+                        </button>
+                        <button onclick="switchForecastPeriod('day3')" 
+                                class="forecast-btn px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-white text-blue-700 border border-blue-200 hover:bg-blue-50">
+                            Day 3
+                        </button>
+                    </div>
+                </div>
+                <div id="weatherMap" class="h-[600px] rounded-lg z-0"></div>
+            </div>
+
+            <!-- Weather Summary Cards -->
+            <div id="weatherSummary" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Weather cards will be dynamically inserted here -->
+            </div>
+
+            <!-- About Section -->
+            <div class="bg-blue-900 text-blue-50 rounded-xl shadow-lg p-8 mt-12">
+                <div class="max-w-3xl mx-auto text-center space-y-4">
+                    <h2 class="text-2xl font-bold text-white">About This Weather Map</h2>
+                    <p class="leading-relaxed text-blue-100">
+                        This interactive map displays real-time weather conditions across Cyprus. 
+                        Click on any location marker to view detailed weather information including temperature, 
+                        humidity, wind conditions, and current weather status. Data is provided by WeatherAPI.com.
+                    </p>
+                </div>
+            </div>
+            
+            <footer class="text-center text-gray-500 text-sm mt-12 pb-8 space-y-2">
+                <p>Developed by <a href="https://e1plus.de" target="_blank" class="text-blue-600 hover:text-blue-800 font-medium">e1+</a></p>
+                <div class="text-xs text-gray-400">
+                    <span>Weather data provided by </span>
+                    <a href="https://www.weatherapi.com/" target="_blank" class="hover:text-blue-500 underline">WeatherAPI.com</a>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        // WeatherAPI Configuration
+        const WEATHER_API_KEY = 'e58f0750b43145ec89f131510261801';
+        const WEATHER_API_BASE = 'https://api.weatherapi.com/v1/current.json';
+        const WEATHER_API_FORECAST = 'https://api.weatherapi.com/v1/forecast.json';
+
+        // Global state
+        let weatherMap = null;
+        let weatherMarkers = [];
+        let forecastData = null;
+        let currentForecastPeriod = 'now';
+
+        // Major locations in Cyprus with coordinates
+        const CYPRUS_LOCATIONS = [
+            { name: 'Nicosia', lat: 35.1856, lng: 33.3823 },
+            { name: 'Limassol', lat: 34.7071, lng: 33.0226 },
+            { name: 'Larnaca', lat: 34.9167, lng: 33.6333 },
+            { name: 'Paphos', lat: 34.7766, lng: 32.4245 },
+            { name: 'Famagusta', lat: 35.1250, lng: 33.9500 },
+            { name: 'Kyrenia', lat: 35.3403, lng: 33.3192 },
+            { name: 'Troodos', lat: 34.9333, lng: 32.8667 },
+            { name: 'Ayia Napa', lat: 34.9821, lng: 34.0018 },
+            { name: 'Protaras', lat: 35.0125, lng: 34.0583 },
+            { name: 'Polis', lat: 35.0333, lng: 32.4333 }
+        ];
+
+        // DOM Elements
+        const loadingEl = document.getElementById('loading');
+        const dashboardEl = document.getElementById('dashboard');
+        const errorEl = document.getElementById('error');
+        const errorMessageEl = document.getElementById('error-message');
+        const weatherSummaryEl = document.getElementById('weatherSummary');
+
+        // Helper function to get weather icon URL
+        function getWeatherIconUrl(conditionCode, isDay) {
+            // WeatherAPI provides condition codes, we can use a simple icon service
+            // Using OpenWeatherMap icon codes as reference
+            return `https://openweathermap.org/img/wn/${conditionCode}@2x.png`;
+        }
+
+        // Helper function to format temperature
+        function formatTemperature(temp) {
+            return `${Math.round(temp)}°C`;
+        }
+
+        // Helper function to normalize weather icon URL
+        function normalizeIconUrl(iconUrl) {
+            if (!iconUrl) return '';
+            
+            // WeatherAPI can return:
+            // 1. Protocol-relative URLs like "//cdn.weatherapi.com/weather/64x64/day/116.png"
+            // 2. Relative URLs like "/weather/64x64/day/116.png"
+            // 3. Absolute URLs like "https://cdn.weatherapi.com/weather/64x64/day/116.png"
+            
+            if (iconUrl.startsWith('//')) {
+                // Protocol-relative URL - add https:
+                return `https:${iconUrl}`;
+            } else if (iconUrl.startsWith('http://') || iconUrl.startsWith('https://')) {
+                // Already absolute
+                return iconUrl;
+            } else if (iconUrl.startsWith('/')) {
+                // Relative URL - add domain
+                return `https://cdn.weatherapi.com${iconUrl}`;
+            } else {
+                // Fallback - assume it needs the full path
+                return `https://cdn.weatherapi.com/weather/64x64/${iconUrl}`;
+            }
+        }
+
+        // Helper function to get weather color based on condition
+        function getWeatherColor(condition) {
+            const conditionLower = condition.toLowerCase();
+            if (conditionLower.includes('sun') || conditionLower.includes('clear')) {
+                return '#fbbf24'; // Yellow/Amber
+            } else if (conditionLower.includes('cloud')) {
+                return '#94a3b8'; // Gray
+            } else if (conditionLower.includes('rain') || conditionLower.includes('drizzle')) {
+                return '#3b82f6'; // Blue
+            } else if (conditionLower.includes('storm') || conditionLower.includes('thunder')) {
+                return '#7c3aed'; // Purple
+            } else if (conditionLower.includes('snow')) {
+                return '#e0e7ff'; // Light indigo
+            } else {
+                return '#64748b'; // Default gray
+            }
+        }
+
+        // Fetch forecast data for a location (includes current + 3 days)
+        async function fetchWeatherData(location) {
+            try {
+                const url = `${WEATHER_API_FORECAST}?key=${WEATHER_API_KEY}&q=${location.lat},${location.lng}&days=3&aqi=no&alerts=no`;
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`Weather API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return {
+                    location: location,
+                    current: data.current,
+                    forecast: data.forecast
+                };
+            } catch (error) {
+                console.error(`Error fetching weather for ${location.name}:`, error);
+                return null;
+            }
+        }
+
+        // Extract weather data for a specific period
+        function getWeatherForPeriod(data, period) {
+            if (!data) return null;
+
+            let weatherData;
+            if (period === 'now') {
+                // Current weather
+                const rawIconUrl = data.current.condition.icon;
+                const iconUrl = normalizeIconUrl(rawIconUrl);
+                weatherData = {
+                    temp: data.current.temp_c,
+                    feelsLike: data.current.feelslike_c,
+                    condition: data.current.condition.text,
+                    conditionCode: data.current.condition.code,
+                    icon: iconUrl,
+                    humidity: data.current.humidity,
+                    windSpeed: data.current.wind_kph,
+                    windDir: data.current.wind_dir,
+                    pressure: data.current.pressure_mb,
+                    uv: data.current.uv,
+                    visibility: data.current.vis_km,
+                    isDay: data.current.is_day === 1
+                };
+            } else {
+                // Forecast for specific day
+                // Note: days=3 gives us indices 0 (today), 1 (tomorrow), 2 (day after tomorrow)
+                const dayIndex = period === 'today' ? 0 : period === 'tomorrow' ? 1 : period === 'day2' ? 2 : 2; // day3 also uses index 2 (max available)
+                if (!data.forecast || !data.forecast.forecastday || !data.forecast.forecastday[dayIndex]) {
+                    return null;
+                }
+                
+                const day = data.forecast.forecastday[dayIndex];
+                const rawIconUrl = day.day.condition.icon;
+                const iconUrl = normalizeIconUrl(rawIconUrl);
+                
+                // Use day's average/max values
+                weatherData = {
+                    temp: day.day.avgtemp_c,
+                    feelsLike: day.day.avgtemp_c, // Forecast doesn't have feels like for day average
+                    condition: day.day.condition.text,
+                    conditionCode: day.day.condition.code,
+                    icon: iconUrl,
+                    humidity: day.day.avghumidity,
+                    windSpeed: day.day.maxwind_kph,
+                    windDir: '', // Not available in daily forecast
+                    pressure: 0, // Not available in daily forecast
+                    uv: day.day.uv,
+                    visibility: 0, // Not available in daily forecast
+                    isDay: true,
+                    date: day.date,
+                    maxTemp: day.day.maxtemp_c,
+                    minTemp: day.day.mintemp_c,
+                    chanceOfRain: day.day.daily_chance_of_rain
+                };
+            }
+
+            return {
+                location: data.location,
+                weather: weatherData
+            };
+        }
+
+        // Render weather data for a specific period
+        function renderWeatherData(period) {
+            if (!forecastData || !weatherMap) return;
+
+            // Clear existing markers
+            weatherMarkers.forEach(marker => weatherMap.removeLayer(marker));
+            weatherMarkers = [];
+
+            // Clear summary cards
+            weatherSummaryEl.innerHTML = '';
+
+            // Get period label for display
+            const periodLabels = {
+                'now': 'Current',
+                'today': 'Today',
+                'tomorrow': 'Tomorrow',
+                'day2': 'Day 2',
+                'day3': 'Day 3'
+            };
+
+            // Process each location
+            forecastData.forEach(data => {
+                const weatherInfo = getWeatherForPeriod(data, period);
+                if (!weatherInfo) return;
+
+                const { location, weather } = weatherInfo;
+                const color = getWeatherColor(weather.condition);
+
+                // Create custom icon with weather icon and temperature
+                const customIcon = L.divIcon({
+                    className: 'custom-weather-marker',
+                    html: `
+                        <div style="
+                            background: white;
+                            border-radius: 50%;
+                            border: 3px solid ${color};
+                            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            justify-content: center;
+                            padding: 4px;
+                            width: 60px;
+                            height: 60px;
+                        ">
+                            <img src="${weather.icon}" 
+                                 alt="${weather.condition}" 
+                                 style="width: 32px; height: 32px; object-fit: contain;"
+                                 onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='block';">
+                            <div style="display: none; font-size: 20px;">☁</div>
+                            <div style="
+                                font-weight: bold;
+                                color: ${color};
+                                font-size: 12px;
+                                margin-top: 2px;
+                                line-height: 1;
+                            ">
+                                ${Math.round(weather.temp)}°
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [60, 60],
+                    iconAnchor: [30, 30],
+                    popupAnchor: [0, -30]
+                });
+
+                // Add marker to map
+                const marker = L.marker([location.lat, location.lng], { icon: customIcon }).addTo(weatherMap);
+                weatherMarkers.push(marker);
+
+                // Create popup content
+                let popupContent = `
+                    <div class="font-sans" style="min-width: 200px;">
+                        <h3 class="font-bold text-lg mb-2">${location.name}</h3>
+                        <p class="text-xs text-gray-500 mb-2">${periodLabels[period]}</p>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex items-center gap-2">
+                                <img src="${weather.icon}" alt="${weather.condition}" class="w-8 h-8" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'64\' height=\'64\'%3E%3Ccircle cx=\'32\' cy=\'32\' r=\'30\' fill=\'%23e2e8f0\'/%3E%3Ctext x=\'32\' y=\'38\' text-anchor=\'middle\' font-size=\'24\' fill=\'%2364748b\'%3E☁%3C/text%3E%3C/svg%3E';">
+                                <span class="font-semibold">${weather.condition}</span>
+                            </div>
+                            <p><strong>Temperature:</strong> ${formatTemperature(weather.temp)}`;
+
+                if (period === 'now' && weather.feelsLike) {
+                    popupContent += ` (feels like ${formatTemperature(weather.feelsLike)})`;
+                } else if (weather.maxTemp && weather.minTemp) {
+                    popupContent += ` (${formatTemperature(weather.maxTemp)} / ${formatTemperature(weather.minTemp)})`;
+                }
+                popupContent += `</p>`;
+
+                if (weather.humidity) {
+                    popupContent += `<p><strong>Humidity:</strong> ${weather.humidity}%</p>`;
+                }
+                if (weather.windSpeed) {
+                    popupContent += `<p><strong>Wind:</strong> ${weather.windSpeed} km/h`;
+                    if (weather.windDir) popupContent += ` ${weather.windDir}`;
+                    popupContent += `</p>`;
+                }
+                if (weather.pressure && period === 'now') {
+                    popupContent += `<p><strong>Pressure:</strong> ${weather.pressure} mb</p>`;
+                }
+                if (weather.uv) {
+                    popupContent += `<p><strong>UV Index:</strong> ${weather.uv}</p>`;
+                }
+                if (weather.visibility && period === 'now') {
+                    popupContent += `<p><strong>Visibility:</strong> ${weather.visibility} km</p>`;
+                }
+                if (weather.chanceOfRain !== undefined) {
+                    popupContent += `<p><strong>Chance of Rain:</strong> ${weather.chanceOfRain}%</p>`;
+                }
+                if (weather.date) {
+                    const date = new Date(weather.date);
+                    popupContent += `<p class="text-xs text-gray-500 mt-2">${date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</p>`;
+                }
+
+                popupContent += `</div></div>`;
+                marker.bindPopup(popupContent);
+
+                // Create summary card
+                const card = document.createElement('div');
+                card.className = 'bg-white rounded-xl shadow-sm border border-blue-100 p-4 hover:shadow-md transition-shadow';
+                
+                let cardContent = `
+                    <div class="flex items-start justify-between mb-2">
+                        <div>
+                            <h4 class="font-bold text-lg text-gray-900">${location.name}</h4>
+                            ${weather.date ? `<p class="text-xs text-gray-500">${new Date(weather.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</p>` : ''}
+                        </div>
+                        <img src="${weather.icon}" alt="${weather.condition}" class="w-10 h-10" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'64\' height=\'64\'%3E%3Ccircle cx=\'32\' cy=\'32\' r=\'30\' fill=\'%23e2e8f0\'/%3E%3Ctext x=\'32\' y=\'38\' text-anchor=\'middle\' font-size=\'24\' fill=\'%2364748b\'%3E☁%3C/text%3E%3C/svg%3E';">
+                    </div>
+                    <div class="space-y-1 text-sm">
+                        <p class="text-2xl font-bold text-blue-600">${formatTemperature(weather.temp)}`;
+
+                if (weather.maxTemp && weather.minTemp && period !== 'now') {
+                    cardContent += ` <span class="text-sm text-gray-500">(${formatTemperature(weather.maxTemp)}/${formatTemperature(weather.minTemp)})</span>`;
+                }
+                cardContent += `</p>`;
+                cardContent += `<p class="text-gray-600">${weather.condition}</p>`;
+                cardContent += `<div class="flex justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">`;
+                
+                if (weather.humidity) {
+                    cardContent += `<span>💧 ${weather.humidity}%</span>`;
+                }
+                if (weather.windSpeed) {
+                    cardContent += `<span>💨 ${weather.windSpeed} km/h</span>`;
+                }
+                if (weather.uv) {
+                    cardContent += `<span>☀️ UV ${weather.uv}</span>`;
+                }
+                if (weather.chanceOfRain !== undefined) {
+                    cardContent += `<span>🌧️ ${weather.chanceOfRain}%</span>`;
+                }
+                
+                cardContent += `</div></div>`;
+                card.innerHTML = cardContent;
+                weatherSummaryEl.appendChild(card);
+            });
+        }
+
+        // Switch forecast period
+        function switchForecastPeriod(period) {
+            if (!forecastData) return;
+
+            currentForecastPeriod = period;
+
+            // Update button states
+            document.querySelectorAll('.forecast-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                btn.classList.add('bg-white', 'text-blue-700', 'border', 'border-blue-200', 'hover:bg-blue-50');
+            });
+
+            // Activate selected button
+            const buttons = document.querySelectorAll('.forecast-btn');
+            const periodIndex = ['now', 'today', 'tomorrow', 'day2', 'day3'].indexOf(period);
+            if (buttons[periodIndex]) {
+                buttons[periodIndex].classList.add('active', 'bg-blue-600', 'text-white', 'hover:bg-blue-700');
+                buttons[periodIndex].classList.remove('bg-white', 'text-blue-700', 'border', 'border-blue-200', 'hover:bg-blue-50');
+            }
+
+            // Render weather data for selected period
+            renderWeatherData(period);
+        }
+
+        // Initialize map and load weather data
+        async function initWeatherMap() {
+            try {
+                // Ensure map container exists and is visible
+                const mapContainer = document.getElementById('weatherMap');
+                if (!mapContainer) {
+                    throw new Error('Map container not found');
+                }
+
+                // Wait a bit to ensure DOM is ready and container is visible
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // Initialize map centered on Cyprus
+                const map = L.map('weatherMap', {
+                    zoomControl: true,
+                    attributionControl: true,
+                    preferCanvas: false
+                }).setView([35.0, 33.2], 9);
+
+                // Use OpenStreetMap as primary tile layer (more reliable)
+                const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    subdomains: ['a', 'b', 'c'],
+                    maxZoom: 19,
+                    tileSize: 256,
+                    zoomOffset: 0,
+                    crossOrigin: true
+                });
+
+                // Add fallback CARTO layer
+                const cartoLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    subdomains: 'abcd',
+                    maxZoom: 19,
+                    crossOrigin: true
+                });
+
+                // Track if we've switched to fallback
+                let usingFallback = false;
+
+                // Add primary layer
+                osmLayer.addTo(map);
+
+                // Invalidate map size to ensure proper rendering
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 200);
+
+                // Add error handling - if tiles fail to load, switch to fallback
+                osmLayer.on('tileerror', function(error, tile) {
+                    if (!usingFallback) {
+                        console.warn('OSM tile layer error, switching to CARTO fallback');
+                        usingFallback = true;
+                        map.removeLayer(osmLayer);
+                        cartoLayer.addTo(map);
+                    }
+                });
+
+                // Also check after a delay if tiles are loading
+                setTimeout(() => {
+                    // Check if we have loaded tiles
+                    const hasTiles = osmLayer._tiles && Object.keys(osmLayer._tiles).length > 0;
+                    if (!hasTiles && !usingFallback) {
+                        console.warn('OSM tiles not loading, switching to CARTO fallback');
+                        usingFallback = true;
+                        map.removeLayer(osmLayer);
+                        cartoLayer.addTo(map);
+                    }
+                }, 2000);
+
+                // Show loading state
+                loadingEl.classList.remove('hidden');
+                dashboardEl.classList.add('hidden');
+
+                // Store map globally
+                weatherMap = map;
+
+                // Fetch forecast data for all locations
+                const weatherPromises = CYPRUS_LOCATIONS.map(loc => fetchWeatherData(loc));
+                const weatherResults = await Promise.all(weatherPromises);
+
+                // Filter out failed requests
+                const validWeatherData = weatherResults.filter(data => data !== null);
+
+                if (validWeatherData.length === 0) {
+                    throw new Error('No weather data could be loaded');
+                }
+
+                // Store forecast data globally
+                forecastData = validWeatherData;
+
+                // Hide loading, show dashboard
+                loadingEl.classList.add('hidden');
+                dashboardEl.classList.remove('hidden');
+
+                // Render initial view (current weather) after dashboard is visible
+                setTimeout(() => {
+                    renderWeatherData('now');
+                    map.invalidateSize();
+                }, 100);
+
+            } catch (error) {
+                console.error('Error initializing weather map:', error);
+                loadingEl.classList.add('hidden');
+                errorEl.classList.remove('hidden');
+                errorMessageEl.textContent = `Error loading weather data: ${error.message}`;
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initWeatherMap);
+    </script>
+</body>
+</html>
